@@ -2,14 +2,11 @@ name: Release Python Package
 
 on:
   push:
-    branches: [main, master] # <-- escucha ambas
-    tags:
-      - "v*" # <-- por si quieres disparar al crear tags
-  workflow_dispatch: # <-- botón "Run workflow"
+    branches: [master]
 
 permissions:
-  contents: write # crear tags y releases
-  id-token: write # si migras a OIDC
+  contents: write # para crear tags y releases
+  id-token: write # por si migras a OIDC con PyPI en el futuro
 
 jobs:
   release:
@@ -19,17 +16,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0 # semantic-release necesita el historial para calcular la versión
 
       - name: Set up Python 3.12.10
         uses: actions/setup-python@v5
         with:
           python-version: "3.12.10"
-
-      - name: Configure git identity (para semantic-release)
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Install base deps (requirements.txt)
         if: hashFiles('requirements.txt') != ''
@@ -41,38 +33,46 @@ jobs:
         run: |
           pip install --upgrade build twine python-semantic-release
 
+      # 1) Calcular siguiente versión según Conventional Commits, actualizar versión y crear TAG
       - name: Bump version & tag (semantic-release)
         id: semver
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Solo la fase de "version" (no publica aún)
           semantic-release version
+          # Guardar el tag recién creado en el entorno
           TAG="$(git describe --tags --abbrev=0)"
           echo "TAG=$TAG" >> $GITHUB_ENV
+          # También extraer la versión "pura" sin la 'v' inicial (si la usas)
           VERSION="${TAG#v}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      # 2) Construir desde pyproject.toml (sdist y wheel)
       - name: Build distribution
         run: |
           rm -rf dist/
           python -m build
 
+      # 3) Publicar en PyPI
       - name: Upload to PyPI
-        if: ${{ secrets.PYPI_API_TOKEN }}
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: python -m twine upload dist/*
+        run: |
+          python -m twine upload dist/*
 
+      # 4) Publicar en TestPyPI (opcional pero solicitado)
       - name: Upload to TestPyPI
-        if: ${{ secrets.TEST_PYPI_API_TOKEN }}
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
-        run: python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+        run: |
+          python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
 
+      # 5) Crear/actualizar el GitHub Release con los artefactos
       - name: Create GitHub Release and upload artifacts
         uses: softprops/action-gh-release@v2
         with:
