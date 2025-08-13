@@ -24,3 +24,16 @@ where = ["src"]
 
 [project.scripts]
 minimum-pipeline = "minimum_pipeline.cli:main"
+
+
+# --- NUEVO: configuración para python-semantic-release ---
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+branch = "master"
+tag_format = "v{version}"
+upload_to_pypi = false          # publicamos con twine en el workflow
+build_command = "python -m build"
+changelog_file = "CHANGELOG.md"
+
+[tool.semantic_release.commit_parser_options]
+major_tags = ["BREAKING CHANGE", "!:"]  # Conventional Commits
