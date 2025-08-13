@@ -69,12 +69,24 @@ jobs:
           TWINE_PASSWORD: ${{ env.PYPI_API_TOKEN }}
         run: python -m twine upload dist/*
 
-      - name: Upload to TestPyPI
-        if: ${{ env.TEST_PYPI_API_TOKEN != '' }}
+      - name: Preflight TestPyPI token
+        run: |
+          if [ -z "${{ secrets.TEST_PYPI_API_TOKEN }}" ]; then
+            echo "ERROR: Falta el secreto TEST_PYPI_API_TOKEN en Settings → Secrets → Actions."
+            exit 1
+          fi
+
+      - name: Upload to TestPyPI (Twine + token, verbose)
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ env.TEST_PYPI_API_TOKEN }}
-        run: python -m twine upload --repository-url https://test.pypi.org/legacy/ dist/*
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+        run: |
+          python -m pip install --upgrade twine
+          python -m twine upload \
+            --repository-url https://test.pypi.org/legacy/ \
+            --non-interactive \
+            --verbose \
+            dist/*
 
       - name: Create GitHub Release and upload artifacts
         uses: softprops/action-gh-release@v2
